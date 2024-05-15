@@ -118,6 +118,36 @@ function WebAuthnComponent() {
     }
   };
 
+  const finishAuthentication = async () => {
+    if (!assertionData) {
+      alert("No assertion data available");
+      return;
+    }
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:8080/auth/assertion/finish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assertionId: assertionData.assertionId,
+          credential: assertionData.credential
+        })
+      });
+      if (!response.ok) {
+        throw new Error('Error finishing authentication');
+      }
+      const result = await response.text();
+      console.log('Authentication finished:', result);
+      alert("Authentication successful!");
+    } catch (error) {
+      console.error('Error during authentication finish:', error);
+      setError("Authentication finish failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div>
       {isLoading && <p>Loading...</p>}
@@ -132,7 +162,9 @@ function WebAuthnComponent() {
       <button onClick={startRegistration} disabled={isLoading}>Start Passkey Registration</button>
       <button onClick={finishRegistration} disabled={isLoading || !registrationData}>Finish Passkey Registration</button>
       <button onClick={startAuthentication} disabled={isLoading}>Start Authentication Process</button>
+      <button onClick={finishAuthentication} disabled={isLoading || !assertionData}>Finish Authentication Process</button>
     </div>
   );
 }
+
 export default WebAuthnComponent;
