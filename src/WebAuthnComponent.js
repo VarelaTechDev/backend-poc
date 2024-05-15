@@ -4,6 +4,7 @@ import * as webauthnJson from "@github/webauthn-json";
 function WebAuthnComponent() {
   const [username, setUsername] = useState('exampleUser');
   const [registrationData, setRegistrationData] = useState(null);
+  const [assertionData, setAssertionData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -11,16 +12,39 @@ function WebAuthnComponent() {
     setUsername(event.target.value);
   };
 
+  const createUser = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`http://localhost:8080/auth/createUser?username=${encodeURIComponent(username)}`, {
+        method: 'POST'
+      });
+      if (!response.ok) {
+        throw new Error('Error creating user');
+      }
+      alert('User created successfully');
+    } catch (error) {
+      console.error('Error during user creation:', error);
+      setError("User creation failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const startRegistration = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`http://localhost:8080/register/start?username=${encodeURIComponent(username)}`, { method: 'POST' });
+      const response = await fetch(`http://localhost:8080/auth/registration/start?username=${encodeURIComponent(username)}`, {
+        method: 'POST'
+      });
+      if (!response.ok) {
+        throw new Error('Error starting registration');
+      }
       const data = await response.json();
       const options = { publicKey: data.publicKeyCredentialCreationOptions };
-      
+
       console.log("Registration options:", options);
       const credential = await webauthnJson.create(options);
-      
+
       setRegistrationData({
         registrationId: data.registrationId,
         credential
@@ -43,11 +67,17 @@ function WebAuthnComponent() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8080/registration/finish', {
+      const response = await fetch('http://localhost:8080/auth/registration/finish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(registrationData)
+        body: JSON.stringify({
+          registrationId: registrationData.registrationId,
+          credential: registrationData.credential
+        })
       });
+      if (!response.ok) {
+        throw new Error('Error finishing registration');
+      }
       const result = await response.text();
       console.log('Registration finished:', result);
       alert("Registration successful!");
@@ -59,38 +89,30 @@ function WebAuthnComponent() {
     }
   };
 
-  const signIn = async () => {
+  const startAuthentication = async () => {
     setIsLoading(true);
     try {
-      const startResponse = await fetch(`http://localhost:8080/assertion/start?username=${encodeURIComponent(username)}`, { method: 'POST' });
-      const startData = await startResponse.json();
-      
-      if (!startResponse.ok) {
-        throw new Error(`Start assertion failed: ${startData.error || 'Unknown error'}`);
-      }
-
-      const credential = await webauthnJson.get({ publicKey: startData.publicKeyCredentialRequestOptions });
-      
-      const finishResponse = await fetch('http://localhost:8080/assertion/finish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assertionId: startData.assertionId,
-          credential: credential
-        })
+      const response = await fetch(`http://localhost:8080/auth/assertion/start?username=${encodeURIComponent(username)}`, {
+        method: 'POST'
       });
-
-      const finishResult = await finishResponse.text();
-      
-      if (finishResponse.ok) {
-        console.log('Sign-in successful:', finishResult);
-        alert('Sign-in successful!');
-      } else {
-        throw new Error(`Finish assertion failed: ${finishResult}`);
+      if (!response.ok) {
+        throw new Error('Error starting authentication');
       }
+      const data = await response.json();
+      const options = { publicKey: data.publicKeyCredentialRequestOptions };
+
+      console.log("Authentication options:", options);
+      const credential = await webauthnJson.get(options);
+
+      setAssertionData({
+        assertionId: data.assertionId,
+        credential
+      });
+      console.log('PublicKeyCredential assertion:', credential);
+      alert("Passkey authentication initiation successful!");
     } catch (error) {
-      console.error('Error during sign-in:', error);
-      setError("Sign-in failed: " + error.message);
+      console.error('Error during authentication start:', error);
+      setError("Authentication initiation failed.");
     } finally {
       setIsLoading(false);
     }
@@ -106,11 +128,11 @@ function WebAuthnComponent() {
         onChange={handleUsernameChange}
         placeholder="Enter username"
       />
+      <button onClick={createUser} disabled={isLoading}>Create User</button>
       <button onClick={startRegistration} disabled={isLoading}>Start Passkey Registration</button>
       <button onClick={finishRegistration} disabled={isLoading || !registrationData}>Finish Passkey Registration</button>
-      <button onClick={signIn} disabled={isLoading}>Sign in with Passkey</button>
+      <button onClick={startAuthentication} disabled={isLoading}>Start Authentication Process</button>
     </div>
   );
 }
-
 export default WebAuthnComponent;
